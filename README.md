@@ -81,9 +81,12 @@ sudo timedatectl set-timezone Asia/Kolkata
 scripts/commodities.sh     pre-run script; MODE picks the output
 scripts/quotes.py          fetches quotes and headlines, prints report JSON
 scripts/format_plain.jq    report JSON -> plain-text briefing
+scripts/briefing-plain.sh  wrapper: MODE=plain
+scripts/briefing-raw.sh    wrapper: MODE=raw
+scripts/briefing-gate.sh   wrapper: MODE=gate
 examples/cron-commands.sh  the three cron jobs, with the prompts
 examples/report.sample.json  fixture, so the formatter and gate run offline
-tests/test_quotes.py       13 offline tests
+tests/test_quotes.py       27 offline tests
 ```
 
 ## Configuration
@@ -95,37 +98,65 @@ Everything is an environment variable; there is no config file.
 | `MODE` | `raw` | `raw`, `plain` or `gate` |
 | `MOVE_THRESHOLD` | `1.5` | percent move that opens the gate (`MODE=gate`) |
 | `WORK_DIR` | `~/.hermes/work/commodities` | where `report.json` is kept |
+| `PROVIDER_ORDER` | `yahoo,stooq` | which price provider to try first |
 | `FIXTURE` | — | read a saved report instead of the network |
 
-Which instruments appear is the `SYMBOLS` dict at the top of
-`scripts/quotes.py`. Yahoo symbols: `GC=F` gold, `SI=F` silver, `HG=F` copper,
-`CL=F` WTI, `NG=F` natural gas, `INR=X` USD/INR.
+Which instruments appear is the `SYMBOLS` list at the top of
+`scripts/quotes.py` — see the symbol table below.
 
 The threshold is the whole design of the gate: too low and you have built a
 notification you will mute, too high and you hear about it from the news first.
 
 ## Data sources, and their honest caveats
 
-Quotes come from Yahoo Finance's chart endpoint; headlines from Google News
-RSS. Neither needs a key, and **neither is an official, supported API.**
-Yahoo's response shape has changed before; Google News RSS carries no
-stability guarantee. That is the price of no API key.
+Two price providers, tried in order per symbol, plus Google News RSS for
+headlines. Nothing here needs a key or an account.
 
-The script is built for that. A failed symbol lands in `errors` rather than
-killing the run, so a partial outage still produces a briefing, and the
-briefing says which instruments are missing. The tests inject every upstream
-response, so they keep passing when the endpoints are down and start failing
-the moment our own parsing breaks.
+| Provider | Endpoint | Format |
+|---|---|---|
+| Yahoo (primary) | `query1.finance.yahoo.com/v8/finance/chart/GC=F` | JSON |
+| Stooq (fallback) | `stooq.com/q/d/l/?s=xauusd&d1=…&d2=…&i=d` | daily CSV |
+| Google News | `news.google.com/rss/search?q=…` | RSS |
 
-What they cannot catch is a silent upstream format change. **Run `make check`
-once a month.** If you would rather have something more stable, Stooq serves
-the same quotes as CSV:
+**None of the three is an official, supported API.** Yahoo's response shape
+has changed before; Stooq publishes no API contract; Google News RSS carries
+no stability guarantee. That is the price of no API key.
 
+Swapping one unofficial source for another does not remove that risk, it just
+moves it — so the script uses both. A symbol is only reported as an error when
+*every* provider failed for it, and each `quotes[]` row records which provider
+answered:
+
+```json
+{"label": "Gold (COMEX, $/oz)", "symbol": "GC=F", "source": "yahoo",
+ "last": 4120.5, "prev": 4086.2, "pct": 0.84}
 ```
-https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlc&h&e=csv
-```
 
-Swap it into `parse_quote()` and nothing else changes.
+So Yahoo going down, or changing its JSON shape, costs you the `source` label
+and nothing else. A symbol that both providers fail lands in `errors`, the run
+still produces a briefing, and the briefing says what is missing.
+
+Flip the order with `PROVIDER_ORDER=stooq,yahoo`. Add or remove instruments in
+the `SYMBOLS` list at the top of `scripts/quotes.py`; a provider key may be
+omitted for a symbol it does not carry.
+
+| Instrument | Yahoo | Stooq |
+|---|---|---|
+| Gold | `GC=F` | `xauusd` |
+| Silver | `SI=F` | `xagusd` |
+| Copper | `HG=F` | `hg.f` |
+| WTI crude | `CL=F` | `cl.f` |
+| Natural gas | `NG=F` | `ng.f` |
+| USD/INR | `INR=X` | `usdinr` |
+
+### What the fallback does not cover
+
+Both providers changing at once, and either one silently returning stale
+numbers. The tests inject every upstream response, so they keep passing when
+the endpoints are down and start failing the moment our own parsing or
+fallback logic breaks — but no test catches a format change upstream.
+
+**Run `make check` once a month.** It is the only thing that does.
 
 ## Notes from running this
 

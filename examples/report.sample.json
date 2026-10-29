@@ -2,32 +2,36 @@
   "asof": "2026-10-29T01:30:00+00:00",
   "quotes": [
     {
-      "label": "Gold (COMEX, $/oz)",
-      "symbol": "GC=F",
       "last": 4120.5,
       "prev": 4086.2,
-      "pct": 0.84
+      "pct": 0.84,
+      "label": "Gold (COMEX, $/oz)",
+      "symbol": "GC=F",
+      "source": "yahoo"
     },
     {
-      "label": "Silver (COMEX, $/oz)",
-      "symbol": "SI=F",
       "last": 52.11,
       "prev": 53.13,
-      "pct": -1.92
+      "pct": -1.92,
+      "label": "Silver (COMEX, $/oz)",
+      "symbol": "xagusd",
+      "source": "stooq"
     },
     {
-      "label": "WTI crude ($/bbl)",
-      "symbol": "CL=F",
       "last": 61.44,
       "prev": 61.4,
-      "pct": 0.07
+      "pct": 0.07,
+      "label": "WTI crude ($/bbl)",
+      "symbol": "CL=F",
+      "source": "yahoo"
     },
     {
-      "label": "USD/INR",
-      "symbol": "INR=X",
       "last": 88.42,
       "prev": 88.38,
-      "pct": 0.05
+      "pct": 0.05,
+      "label": "USD/INR",
+      "symbol": "INR=X",
+      "source": "yahoo"
     }
   ],
   "headlines": [
@@ -36,7 +40,7 @@
     "Copper steady ahead of China PMI - Mining.com"
   ],
   "errors": [
-    "Copper ($/lb): HTTPError"
+    "Copper ($/lb): yahoo HTTPError; stooq ValueError"
   ],
   "biggest_move": 1.92
 }
