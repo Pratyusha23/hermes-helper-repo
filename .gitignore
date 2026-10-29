@@ -1,0 +1,14 @@
+# Runtime output. report.json is regenerated on every tick.
+work/
+report.json
+
+# Never commit a token. Hermes keeps these in ~/.hermes/secrets/.
+*.token
+secrets/
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.DS_Store
