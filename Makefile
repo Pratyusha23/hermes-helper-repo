@@ -33,9 +33,15 @@ install:
 	install -m 755 scripts/commodities.sh $(HERMES_SCRIPTS)/
 	install -m 755 scripts/quotes.py      $(HERMES_SCRIPTS)/
 	install -m 644 scripts/format_plain.jq $(HERMES_SCRIPTS)/
+	install -m 755 scripts/briefing-plain.sh $(HERMES_SCRIPTS)/
+	install -m 755 scripts/briefing-raw.sh   $(HERMES_SCRIPTS)/
+	install -m 755 scripts/briefing-gate.sh  $(HERMES_SCRIPTS)/
 	@echo "installed into $(HERMES_SCRIPTS)"
 
 uninstall:
 	rm -f $(HERMES_SCRIPTS)/commodities.sh \\
 	      $(HERMES_SCRIPTS)/quotes.py \\
-	      $(HERMES_SCRIPTS)/format_plain.jq
+	      $(HERMES_SCRIPTS)/format_plain.jq \
+	      $(HERMES_SCRIPTS)/briefing-plain.sh \
+	      $(HERMES_SCRIPTS)/briefing-raw.sh \
+	      $(HERMES_SCRIPTS)/briefing-gate.sh

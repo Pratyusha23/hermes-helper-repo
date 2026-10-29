@@ -31,13 +31,17 @@ scheduled agent is decided.
 the work.** Inverting those — letting the model check whether there is anything
 to do — is how a scheduled agent quietly runs up a bill doing nothing.
 
-One script here, three modes:
+One script here, three modes, each with a thin wrapper to use as `--script`:
 
-| `MODE` | Output | Model called? |
-|---|---|---|
-| `plain` | a finished plain-text briefing | **no** — `--no-agent` sends stdout verbatim |
-| `raw` | the full report JSON, as context | yes, every tick |
-| `gate` | `{"wakeAgent": false}`, or `true` plus context | **only when something moved** |
+| Wrapper | `MODE` | Output | Model called? |
+|---|---|---|---|
+| `briefing-plain.sh` | `plain` | a finished plain-text briefing | **no** — `--no-agent` sends stdout verbatim |
+| `briefing-raw.sh` | `raw` | the full report JSON, as context | yes, every tick |
+| `briefing-gate.sh` | `gate` | `{"wakeAgent": false}`, or `true` plus context | **only when something moved** |
+
+The wrappers exist because the mode has to be set when the *scheduled run*
+happens. `MODE=plain hermes cron create ...` sets it for the create command and
+nothing else, and the job would quietly run in the default mode every morning.
 
 `gate` is the interesting one. Hermes reads the *last line* of a pre-run
 script's output and expects JSON: `{"wakeAgent": false}` skips the tick
@@ -59,8 +63,8 @@ make install  # copy into ~/.hermes/scripts/
 Then pick a cron job from [`examples/cron-commands.sh`](examples/cron-commands.sh):
 
 ```bash
-MODE=plain hermes cron create "0 7 * * *" "Daily commodities briefing" \
-  --name commodities --no-agent --script commodities.sh --deliver telegram
+hermes cron create "0 7 * * *" "Daily commodities briefing" \
+  --name commodities --no-agent --script briefing-plain.sh --deliver telegram
 ```
 
 **Set the box's timezone before you schedule anything.** Cron expressions are
