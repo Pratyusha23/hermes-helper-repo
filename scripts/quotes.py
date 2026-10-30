@@ -102,9 +102,7 @@ def parse_yahoo(body: bytes) -> dict:
     """Last price and previous close from a Yahoo chart response."""
     meta = json.loads(body)["chart"]["result"][0]["meta"]
     previous = meta.get("chartPreviousClose") or meta.get("previousClose")
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        price = meta.get("regularMarketPriceV2", {}).get("raw")
+    price = meta["regularMarketPrice"]
     return _move(float(price),
                  float(previous) if previous else None)
 
