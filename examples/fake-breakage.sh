@@ -128,12 +128,13 @@ import pathlib, sys
 
 q = pathlib.Path("scripts/quotes.py")
 s = q.read_text()
-old = '    previous = meta.get("chartPreviousClose") or meta.get("previousClose")'
+old = """    price = meta.get("regularMarketPrice")
+    if price is None:
+        price = meta.get("regularMarketPriceV2", {}).get("raw")"""
 if old not in s:
-    sys.exit("could not find the line to break in scripts/quotes.py")
-s = s.replace('_move(float(meta["regularMarketPrice"]),',
-              '_move(float(meta["regularMarketPriceV2"]["raw"]),')
-q.write_text(s)
+    sys.exit("scripts/quotes.py is not in the expected shape; "
+             "check parse_yahoo before rehearsing")
+q.write_text(s.replace(old, '    price = meta["regularMarketPriceV2"]["raw"]'))
 
 f = pathlib.Path("tests/fixtures.py")
 t = f.read_text()
@@ -166,8 +167,9 @@ if old not in s:
     sys.exit("could not find the line to break in tests/fixtures.py")
 p.write_text(s.replace(
     old,
-    '    # REHEARSAL BREAK: Yahoo moved the price into a nested object.\n'
-    '    meta = {"regularMarketPriceV2": {"raw": price, "fmt": str(price)}}'))
+    '    # REHEARSAL BREAK: Yahoo moved the price again, to a shape no\n'
+    '    # version of the parser has ever read.\n'
+    '    meta = {"marketPrice": {"value": price, "currency": "USD"}}'))
 PATCH
   echo "moved the Yahoo fixture to the V2 shape; 'make test' should now fail"
 fi

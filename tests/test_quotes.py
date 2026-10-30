@@ -21,16 +21,12 @@ import quotes  # noqa: E402
 
 import fixtures  # noqa: E402
 
-STOOQ_OK = fixtures.STOOQ_OK
-STOOQ_ONE_ROW = fixtures.STOOQ_ONE_ROW
-STOOQ_NO_DATA = fixtures.STOOQ_NO_DATA
-STOOQ_BLANK_CLOSE = fixtures.STOOQ_BLANK_CLOSE
 YAHOO_OK = fixtures.YAHOO_OK
 YAHOO_NO_PREV = fixtures.YAHOO_NO_PREV
 YAHOO_BROKEN = fixtures.YAHOO_BROKEN
 NEWS_OK = fixtures.NEWS_OK
 
-GOLD = {"label": "Gold (COMEX, $/oz)", "stooq": "xauusd", "yahoo": "GC=F"}
+GOLD = {"label": "Gold (COMEX, $/oz)", "yahoo": "GC=F"}
 
 
 def router(**bodies):
@@ -39,12 +35,7 @@ def router(**bodies):
     A body may be an Exception instance, which is raised instead of returned.
     """
     def fetch(url, timeout=20):
-        if "news.google" in url:
-            key = "news"
-        elif "stooq.com" in url:
-            key = "stooq"
-        else:
-            key = "yahoo"
+        key = "news" if "news.google" in url else "yahoo"
         if key not in bodies:
             raise OSError(f"no stub for {key}")
         body = bodies[key]
@@ -58,47 +49,11 @@ def router(**bodies):
 
 class TestUrls(unittest.TestCase):
 
-    def test_stooq_url_shape(self):
-        url = quotes.stooq_url("XAUUSD", today=dt.date(2026, 10, 29))
-        self.assertIn("stooq.com/q/d/l/", url)
-        self.assertIn("s=xauusd", url)          # lowercased
-        self.assertIn("d2=20261029", url)
-        self.assertIn("d1=20261019", url)       # 10-day lookback
-        self.assertIn("i=d", url)
-
-    def test_stooq_url_escapes_dotted_symbols(self):
-        url = quotes.stooq_url("hg.f", today=dt.date(2026, 10, 29))
-        self.assertIn("s=hg.f", url)
-
     def test_yahoo_url_escapes_equals(self):
         self.assertIn("GC%3DF", quotes.yahoo_url("GC=F"))
 
 
 # ----------------------------------------------------------------- parsing
-
-class TestParseStooq(unittest.TestCase):
-
-    def test_uses_last_two_closes(self):
-        got = quotes.parse_stooq(STOOQ_OK)
-        self.assertEqual(got["last"], 4120.5)
-        self.assertEqual(got["prev"], 4086.2)
-        self.assertEqual(got["pct"], 0.84)
-
-    def test_single_row_gives_null_pct(self):
-        got = quotes.parse_stooq(STOOQ_ONE_ROW)
-        self.assertEqual(got["last"], 4120.5)
-        self.assertIsNone(got["prev"])
-        self.assertIsNone(got["pct"])
-
-    def test_no_data_response_raises(self):
-        """Stooq answers an unknown symbol with 'No data'; must not parse."""
-        with self.assertRaises(Exception):
-            quotes.parse_stooq(STOOQ_NO_DATA)
-
-    def test_placeholder_close_raises(self):
-        with self.assertRaises(ValueError):
-            quotes.parse_stooq(STOOQ_BLANK_CLOSE)
-
 
 class TestParseYahoo(unittest.TestCase):
 
@@ -140,46 +95,18 @@ class TestParseHeadlines(unittest.TestCase):
 
 class TestFetchQuote(unittest.TestCase):
 
-    def test_prefers_yahoo(self):
-        """Yahoo is primary; Stooq must not answer while Yahoo is healthy."""
-        row, err = quotes.fetch_quote(
-            GOLD, fetch=router(stooq=STOOQ_OK, yahoo=YAHOO_OK))
+    def test_records_the_source(self):
+        """Every row says which provider answered."""
+        row, err = quotes.fetch_quote(GOLD, fetch=router(yahoo=YAHOO_OK))
         self.assertIsNone(err)
         self.assertEqual(row["source"], "yahoo")
         self.assertEqual(row["symbol"], "GC=F")
 
-    def test_falls_back_to_stooq_on_network_error(self):
-        row, err = quotes.fetch_quote(
-            GOLD, fetch=router(stooq=STOOQ_OK, yahoo=OSError("down")))
-        self.assertIsNone(err)
-        self.assertEqual(row["source"], "stooq")
-        self.assertEqual(row["symbol"], "xauusd")
-
-    def test_falls_back_to_stooq_on_unparseable_body(self):
-        """A format change is as survivable as an outage."""
-        row, err = quotes.fetch_quote(
-            GOLD, fetch=router(stooq=STOOQ_OK, yahoo=YAHOO_BROKEN))
-        self.assertIsNone(err)
-        self.assertEqual(row["source"], "stooq")
-
     def test_error_only_when_every_provider_fails(self):
-        row, err = quotes.fetch_quote(
-            GOLD, fetch=router(stooq=STOOQ_NO_DATA, yahoo=OSError("down")))
+        row, err = quotes.fetch_quote(GOLD, fetch=router(yahoo=OSError("down")))
         self.assertIsNone(row)
         self.assertIn("Gold", err)
         self.assertIn("yahoo OSError", err)
-        self.assertIn("stooq", err)
-
-    def test_order_is_configurable(self):
-        row, _ = quotes.fetch_quote(
-            GOLD, fetch=router(stooq=STOOQ_OK, yahoo=YAHOO_OK),
-            order=("stooq", "yahoo"))
-        self.assertEqual(row["source"], "stooq")
-
-    def test_skips_a_provider_the_symbol_lacks(self):
-        spec = {"label": "Gold spot", "stooq": "xauusd"}
-        row, _ = quotes.fetch_quote(spec, fetch=router(stooq=STOOQ_OK))
-        self.assertEqual(row["source"], "stooq")
 
     def test_no_provider_configured_is_an_error(self):
         row, err = quotes.fetch_quote({"label": "Nothing"},
@@ -193,26 +120,16 @@ class TestFetchQuote(unittest.TestCase):
 class TestBuildReport(unittest.TestCase):
 
     def test_happy_path(self):
-        report = quotes.build_report(
-            fetch=router(stooq=STOOQ_OK, yahoo=YAHOO_OK, news=NEWS_OK))
+        report = quotes.build_report(fetch=router(yahoo=YAHOO_OK, news=NEWS_OK))
         self.assertEqual(len(report["quotes"]), len(quotes.SYMBOLS))
         self.assertEqual(report["errors"], [])
         self.assertEqual(report["biggest_move"], 0.84)
         self.assertEqual(len(report["headlines"]), 3)
         self.assertTrue(all(q["source"] == "yahoo" for q in report["quotes"]))
 
-    def test_whole_provider_outage_degrades_to_the_other(self):
-        """Yahoo down must cost us nothing but the source label."""
-        report = quotes.build_report(
-            fetch=router(stooq=STOOQ_OK, yahoo=OSError("down"), news=NEWS_OK))
-        self.assertEqual(len(report["quotes"]), len(quotes.SYMBOLS))
-        self.assertEqual(report["errors"], [])
-        self.assertTrue(all(q["source"] == "stooq" for q in report["quotes"]))
-
     def test_news_failure_is_reported_not_raised(self):
         report = quotes.build_report(
-            fetch=router(stooq=STOOQ_OK, yahoo=YAHOO_OK,
-                         news=OSError("down")))
+            fetch=router(yahoo=YAHOO_OK, news=OSError("down")))
         self.assertEqual(report["headlines"], [])
         self.assertEqual(report["errors"], ["news: OSError"])
 
@@ -289,7 +206,7 @@ class TestProbe(unittest.TestCase):
         self.assertNotIn("=", rec["raw_file"])
 
     def test_unconfigured_provider_is_skipped_not_failed(self):
-        rec = probe.probe_one({"label": "Spot", "yahoo": "GC=F"}, "stooq",
+        rec = probe.probe_one({"label": "Spot"}, "yahoo",
                               self.out, fetch=router())
         self.assertEqual(rec["stage"], "skipped")
         self.assertIsNone(rec["symbol"])

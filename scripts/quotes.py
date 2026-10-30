@@ -13,29 +13,29 @@ Writes a single JSON object to stdout:
 
 Standard library only, so there is nothing to keep installed on the box.
 
-Two price providers, tried in order per symbol:
+One price provider:
 
   * Yahoo      https://query1.finance.yahoo.com/v8/finance/chart/GC=F
-               JSON. Free, no key. Primary.
-  * Stooq      https://stooq.com/q/d/l/?s=xauusd&d1=...&d2=...&i=d
-               Daily CSV. Free, no key, no registration. Fallback only.
+               JSON. Free, no key.
 
-Neither is an official, supported API, and either could change shape without
-notice. That is the price of needing no key. Using both means a single
-provider's outage or format change degrades one symbol to the other provider
-instead of emptying the briefing -- a symbol is only reported as an error when
-every provider failed for it.
+It is not an official, supported API and could change shape without notice.
+That is the price of needing no key.
 
-What no amount of fallback catches is both providers changing at once, or one
-of them silently returning stale numbers. Run `make check` once a month.
+There was a Stooq fallback here. It lasted days: Stooq put a JavaScript
+browser-verification wall in front of the CSV endpoint, which is not something
+a scraper should try to get around. The strict probe is what noticed, while
+every briefing still looked perfect because Yahoo covered everything -- which
+is the whole argument for checking a backup you are not currently using.
+
+So the protection is the canary, not a second scrape. The multi-provider
+plumbing below is left intact because adding a provider is a dict entry; a
+provider that works is the hard part.
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import datetime as dt
-import io
 import json
 import os
 import sys
@@ -47,23 +47,20 @@ import xml.sax.saxutils as saxutils
 # label -> per-provider symbol. Edit freely; nothing downstream depends on the
 # set. A provider may be omitted for a symbol it does not carry.
 SYMBOLS: list[dict] = [
-    {"label": "Gold (COMEX, $/oz)", "stooq": "xauusd", "yahoo": "GC=F"},
-    {"label": "Silver (COMEX, $/oz)", "stooq": "xagusd", "yahoo": "SI=F"},
-    {"label": "Copper ($/lb)", "stooq": "hg.f", "yahoo": "HG=F"},
-    {"label": "WTI crude ($/bbl)", "stooq": "cl.f", "yahoo": "CL=F"},
-    {"label": "USD/INR", "stooq": "usdinr", "yahoo": "INR=X"},
+    {"label": "Gold (COMEX, $/oz)", "yahoo": "GC=F"},
+    {"label": "Silver (COMEX, $/oz)", "yahoo": "SI=F"},
+    {"label": "Copper ($/lb)", "yahoo": "HG=F"},
+    {"label": "WTI crude ($/bbl)", "yahoo": "CL=F"},
+    {"label": "USD/INR", "yahoo": "INR=X"},
 ]
 
 # Order matters: the first provider to return a usable answer wins.
-# Yahoo is primary; Stooq only answers when Yahoo fails for that symbol.
-# Override with PROVIDER_ORDER=stooq,yahoo to flip it.
-DEFAULT_PROVIDER_ORDER = ("yahoo", "stooq")
+DEFAULT_PROVIDER_ORDER = ("yahoo",)
 
 NEWS_QUERY = '"gold price" OR bullion OR "commodity prices"'
 NEWS_LOCALE = "hl=en-IN&gl=IN&ceid=IN:en"
 MAX_HEADLINES = 6
 TIMEOUT = 20
-LOOKBACK_DAYS = 10          # enough calendar days to contain two sessions
 
 # Yahoo rejects the default urllib user agent.
 HEADERS = {"User-Agent": "Mozilla/5.0 (commodities-briefing)"}
@@ -76,14 +73,6 @@ def http_get(url: str, timeout: int = TIMEOUT) -> bytes:
     request = urllib.request.Request(url, headers=HEADERS)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return response.read()
-
-
-def stooq_url(symbol: str, today: dt.date | None = None) -> str:
-    today = today or dt.date.today()
-    start = today - dt.timedelta(days=LOOKBACK_DAYS)
-    return ("https://stooq.com/q/d/l/"
-            f"?s={urllib.parse.quote(symbol.lower())}"
-            f"&d1={start:%Y%m%d}&d2={today:%Y%m%d}&i=d")
 
 
 def yahoo_url(symbol: str) -> str:
@@ -109,21 +98,6 @@ def _move(last: float, previous: float | None) -> dict:
     }
 
 
-def parse_stooq(body: bytes) -> dict:
-    """Last close and previous close from a Stooq daily CSV.
-
-    Header is Date,Open,High,Low,Close,Volume, oldest row first. Stooq answers
-    a bad symbol with the single word "No data", which has no Close column and
-    so raises here -- exactly what we want, so the next provider is tried.
-    """
-    rows = list(csv.DictReader(io.StringIO(body.decode("utf-8", "replace"))))
-    closes = [float(r["Close"]) for r in rows
-              if r.get("Close") not in (None, "", "-")]
-    if not closes:
-        raise ValueError("no closes in Stooq response")
-    return _move(closes[-1], closes[-2] if len(closes) > 1 else None)
-
-
 def parse_yahoo(body: bytes) -> dict:
     """Last price and previous close from a Yahoo chart response."""
     meta = json.loads(body)["chart"]["result"][0]["meta"]
@@ -135,8 +109,9 @@ def parse_yahoo(body: bytes) -> dict:
                  float(previous) if previous else None)
 
 
+# name -> (url builder, parser). Add an entry to add a provider; fetch_quote
+# tries them in PROVIDER_ORDER and only reports an error when all have failed.
 PROVIDERS = {
-    "stooq": (stooq_url, parse_stooq),
     "yahoo": (yahoo_url, parse_yahoo),
 }
 

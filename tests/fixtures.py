@@ -33,21 +33,6 @@ YAHOO_OK = chart_body()
 YAHOO_NO_PREV = chart_body(previous=None)
 YAHOO_BROKEN = b'{"chart": {"result": []}}'
 
-# --- Stooq -----------------------------------------------------------------
-
-STOOQ_OK = (b"Date,Open,High,Low,Close,Volume\n"
-            b"2026-10-27,4080.1,4095.0,4071.2,4086.2,120345\n"
-            b"2026-10-28,4087.0,4131.4,4085.9,4120.5,133990\n")
-
-STOOQ_ONE_ROW = (b"Date,Open,High,Low,Close,Volume\n"
-                 b"2026-10-28,4087.0,4131.4,4085.9,4120.5,133990\n")
-
-# Stooq answers an unknown symbol with this, which must not parse.
-STOOQ_NO_DATA = b"No data\n"
-
-STOOQ_BLANK_CLOSE = (b"Date,Open,High,Low,Close,Volume\n"
-                     b"2026-10-28,4087.0,4131.4,4085.9,-,0\n")
-
 # --- Google News -----------------------------------------------------------
 
 NEWS_OK = b"""<?xml version="1.0"?>
