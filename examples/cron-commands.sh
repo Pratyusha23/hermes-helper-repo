@@ -116,13 +116,21 @@ in the context. Plain text only." \
 
 CANARY_REPO=owner/name hermes cron create "23 8 * * *" \
   "The data-source canary is failing. The context has the issue, the probe
-results, and a directory of raw response bodies.
+results, a directory of raw response bodies, and a marker_file path.
 
+STEP 1 -- READ THE EVIDENCE FIRST.
 Read the probe to find which provider and which parse step failed. Then read
-the matching .raw file in diagnosis_dir before changing anything -- the body
-shows you the actual new format. Never guess at a format you have not read.
+the matching .raw file in diagnosis_dir. Never change a parser for a format you
+have not read. If the raw body shows the endpoint is gone rather than changed,
+skip to step 5 and recommend a replacement instead of writing code.
 
-Make the smallest change to scripts/quotes.py that parses the new shape.
+STEP 2 -- BRANCH.
+git fetch, then create canary-fix/<short-description> from the default branch.
+Never commit to main.
+
+STEP 3 -- FIX.
+Make the smallest change to scripts/quotes.py that parses the shape you read in
+step 1. No refactors, no new dependencies.
 
 Then update tests/test_quotes.py: REPLACE the stale fixture for that provider
 with the real new body. Do not keep the old one -- it describes a format that
@@ -132,14 +140,29 @@ branch forever.
 tests/test_contract.py is different and you must NOT edit it. It asserts the
 shape of report.json, which format_plain.jq, the gate and this prompt all
 depend on. Yahoo is allowed to change; report.json is not. If your fix cannot
-satisfy that file, the fix is wrong: stop, push nothing, and report why.
+satisfy that file, the fix is wrong: stop, push nothing, go to step 5.
 
-Run the whole suite and report the full count. Push to a branch and comment on
-the issue with what changed and why. Never push to main. Never edit the
-workflow.
+STEP 4 -- PUSH ONLY IF THE SUITE PASSES.
+Run: make test
+Report the full count. Then:
+  - all tests pass  -> commit and push the branch, then open a pull request
+                       with gh pr create, titled for the provider and shape
+                       change, describing what the raw body showed. Comment on
+                       the issue with the PR link.
+  - any test fails  -> push NOTHING. Try once more at most. If it still fails,
+                       go to step 5 and report the failing test names verbatim.
+Never merge. Never force-push. Never edit the workflow or this skill.
 
-If the raw body shows the endpoint is simply gone rather than changed, say so
-and recommend a replacement instead of writing code." \
+STEP 5 -- REPORT, THEN MARK HANDLED.
+Comment on the issue, and send a short plain-text report: what broke, what the
+raw body showed, what you changed, the test count, and the PR link or the
+reason there is none. Telegram renders markdown badly, so plain sentences only.
+
+As your VERY LAST action, and only once you have reached a conclusion, create
+the empty file at the marker_file path from the context. That marker stops this
+job waking again for the same issue every morning while the PR waits for
+review. If you stop early or fail, do NOT create it -- the run should be
+retried tomorrow." \
   --name canary-fix \
   --script canary_gate.sh \
   --deliver telegram

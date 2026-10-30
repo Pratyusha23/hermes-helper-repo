@@ -44,6 +44,22 @@ issue=$("$GH" issue list --repo "$repo" --label canary --state open \
           --limit 1 --json number,title,body,url 2>/dev/null || echo '[]')
 
 if [ "$(printf '%s' "$issue" | jq 'length')" -eq 0 ]; then
+  # No open issue: drop any markers so a future regression is handled afresh.
+  rm -rf "$work/handled" 2>/dev/null || true
+  echo '{"wakeAgent": false}'
+  exit 0
+fi
+
+number=$(printf '%s' "$issue" | jq -r '.[0].number')
+markers="$work/handled"
+mkdir -p "$markers"
+
+# The issue stays open until a later canary run passes, which needs a human to
+# merge the fix. Without a marker the agent would wake every morning in the
+# meantime and redo work it has already done. The AGENT writes this file as its
+# last step, once it has reached a conclusion -- so a run that dies halfway
+# leaves no marker and is retried tomorrow, which is the behaviour we want.
+if [ -e "$markers/$number" ]; then
   echo '{"wakeAgent": false}'
   exit 0
 fi
@@ -73,5 +89,7 @@ jq -nc \
   --argjson issue "$issue" \
   --argjson probe "$probe" \
   --arg dir "$(dirname "${probe_file:-$work/diagnosis/none}")" \
+  --arg marker "$markers/$number" \
   '{wakeAgent: true,
-    context: {issue: $issue[0], probe: $probe, diagnosis_dir: $dir}}'
+    context: {issue: $issue[0], probe: $probe, diagnosis_dir: $dir,
+              marker_file: $marker}}'

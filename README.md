@@ -226,6 +226,17 @@ two lines that matter are *read the raw body before changing anything* and *add
 a test using the real body as a fixture*, so every upstream break becomes a
 permanent regression test.
 
+The agent wakes **once** per break, not every morning. The issue stays open
+until a later canary run passes, which needs a human to merge — so without a
+marker the agent would redo the same work daily while the PR waits. The agent
+writes `marker_file` as its **last** action, once it has reached a conclusion:
+a run that dies halfway leaves no marker and is retried tomorrow. When the
+issue closes, the gate clears the markers, so a regression is handled afresh.
+
+It pushes only when `make test` passes. On a failing suite it pushes nothing,
+retries once, then reports the failing test names. It opens a PR and comments
+the link on the issue; it never merges and never force-pushes.
+
 Two credentials, because they do different jobs and neither can do the other's:
 
 | capability | credential | why |
@@ -233,8 +244,14 @@ Two credentials, because they do different jobs and neither can do the other's:
 | clone, push the fix branch | **deploy key** (write), in `~/.ssh/` | git over SSH; no API surface at all |
 | read the issue, download the artifact, comment | **fine-grained token**, in `~/.hermes/secrets/gh_token` | REST API; deploy keys cannot authenticate to it |
 
-Splitting them means the token never needs `Contents: write` — it only needs
-**Issues: write** and **Actions: read**. Set `CANARY_REPO=owner/name` too.
+Splitting them means the token never needs `Contents: write`. It needs
+**Issues: Read and write** (comment, close), **Actions: Read** (download the
+artifact) and **Pull requests: Read and write** (open the PR). Set
+`CANARY_REPO=owner/name` too.
+
+A token missing one of those fails at the step that needs it, often after the
+useful work is done — `Resource not accessible by personal access token` is
+what that looks like.
 
 ### What none of this catches
 
