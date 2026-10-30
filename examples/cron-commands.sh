@@ -123,11 +123,23 @@ hermes cron create "23 8 * * *" \
   "The data-source canary is failing. The context has the issue, the probe
 results, a directory of raw response bodies, and a marker_file path.
 
+STEP 0 -- WHERE YOU ARE WORKING.
+The git clone is at the repo_dir path in the context. cd there first. Every
+file path below is relative to it. Do not search the filesystem for the repo
+and do not clone it again; if repo_dir is empty or missing, stop and report
+that instead of guessing.
+
 STEP 1 -- READ THE EVIDENCE FIRST.
 Read the probe to find which provider and which parse step failed. Then read
 the matching .raw file in diagnosis_dir. Never change a parser for a format you
 have not read. If the raw body shows the endpoint is gone rather than changed,
 skip to step 5 and recommend a replacement instead of writing code.
+
+Then check whether the code actually has this problem: run `make test` before
+changing anything. If it already passes and the parser already handles the
+shape in the raw body, there is nothing to fix -- the issue is stale. Say so in
+step 5, change no code, and still mark handled. Do not invent a change to
+justify the run.
 
 STEP 2 -- BRANCH.
 git fetch, then create canary-fix/<short-description> from the default branch.

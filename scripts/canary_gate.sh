@@ -42,6 +42,7 @@ EOF
   exit 0
 fi
 repo="$CANARY_REPO"
+clone="${CANARY_CLONE:-}"
 token_file="${GH_TOKEN_FILE:-$HOME/.hermes/secrets/gh_token}"
 work="${WORK_DIR:-$HOME/.hermes/work/canary}"
 
@@ -113,6 +114,7 @@ jq -nc \
   --argjson probe "$probe" \
   --arg dir "$(dirname "${probe_file:-$work/diagnosis/none}")" \
   --arg marker "$markers/$number" \
+  --arg clone "$clone" \
   '{wakeAgent: true,
     context: {issue: $issue[0], probe: $probe, diagnosis_dir: $dir,
-              marker_file: $marker}}'
+              marker_file: $marker, repo_dir: $clone}}'

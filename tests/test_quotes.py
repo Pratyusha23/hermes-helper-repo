@@ -19,41 +19,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts
 import quotes  # noqa: E402
 
 
-# --------------------------------------------------------------- fixtures
+import fixtures  # noqa: E402
 
-STOOQ_OK = (b"Date,Open,High,Low,Close,Volume\n"
-            b"2026-10-27,4080.1,4095.0,4071.2,4086.2,120345\n"
-            b"2026-10-28,4087.0,4131.4,4085.9,4120.5,133990\n")
-
-STOOQ_ONE_ROW = (b"Date,Open,High,Low,Close,Volume\n"
-                 b"2026-10-28,4087.0,4131.4,4085.9,4120.5,133990\n")
-
-STOOQ_NO_DATA = b"No data\n"
-
-STOOQ_BLANK_CLOSE = (b"Date,Open,High,Low,Close,Volume\n"
-                     b"2026-10-28,4087.0,4131.4,4085.9,-,0\n")
-
-YAHOO_OK = json.dumps({
-    "chart": {"result": [{"meta": {
-        "regularMarketPrice": 4120.5,
-        "chartPreviousClose": 4086.2,
-    }}]}
-}).encode()
-
-YAHOO_NO_PREV = json.dumps({
-    "chart": {"result": [{"meta": {"regularMarketPrice": 4120.5}}]}
-}).encode()
-
-YAHOO_BROKEN = b'{"chart": {"result": []}}'
-
-NEWS_OK = b"""<?xml version="1.0"?>
-<rss><channel>
-  <item><title>Gold holds near record</title><source>Reuters</source></item>
-  <item><title>Silver slips after Barrick &amp; Newmont results</title>
-        <source>Bloomberg</source></item>
-  <item><title>Copper steady</title></item>
-  <item><title></title><source>Nobody</source></item>
-</channel></rss>"""
+STOOQ_OK = fixtures.STOOQ_OK
+STOOQ_ONE_ROW = fixtures.STOOQ_ONE_ROW
+STOOQ_NO_DATA = fixtures.STOOQ_NO_DATA
+STOOQ_BLANK_CLOSE = fixtures.STOOQ_BLANK_CLOSE
+YAHOO_OK = fixtures.YAHOO_OK
+YAHOO_NO_PREV = fixtures.YAHOO_NO_PREV
+YAHOO_BROKEN = fixtures.YAHOO_BROKEN
+NEWS_OK = fixtures.NEWS_OK
 
 GOLD = {"label": "Gold (COMEX, $/oz)", "stooq": "xauusd", "yahoo": "GC=F"}
 
@@ -317,8 +292,8 @@ class TestProbe(unittest.TestCase):
         self.assertIsNone(rec["symbol"])
 
     def test_empty_feed_counts_as_a_parse_failure(self):
-        empty = b'<?xml version="1.0"?><rss><channel></channel></rss>'
-        rec = probe.probe_news(self.out, fetch=router(news=empty))
+        rec = probe.probe_news(self.out,
+                               fetch=router(news=fixtures.NEWS_EMPTY))
         self.assertFalse(rec["ok"])
         self.assertIn("no headlines", rec["error"])
 

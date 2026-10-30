@@ -41,6 +41,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import fixtures  # noqa: E402
 import quotes  # noqa: E402
 
 REPORT_KEYS = {"asof", "quotes", "headlines", "errors", "biggest_move"}
@@ -48,17 +49,16 @@ QUOTE_KEYS = {"label", "symbol", "source", "last", "prev", "pct"}
 
 
 def fake_fetch(yahoo_price=4120.5, yahoo_prev=4086.2):
-    """A fetch() that satisfies every symbol, so we test shape not sourcing."""
-    chart = json.dumps({"chart": {"result": [{"meta": {
-        "regularMarketPrice": yahoo_price,
-        "chartPreviousClose": yahoo_prev,
-    }}]}}).encode()
-    news = (b'<?xml version="1.0"?><rss><channel>'
-            b"<item><title>A headline</title><source>Wire</source></item>"
-            b"</channel></rss>")
+    """A fetch() that satisfies every symbol, so we test shape not sourcing.
+
+    The body comes from tests/fixtures.py on purpose. When a provider changes
+    shape you edit the fixture; nothing in THIS file should ever need to
+    change, because the whole point of it is to survive that.
+    """
+    chart = fixtures.chart_body(yahoo_price, yahoo_prev)
 
     def fetch(url, timeout=20):
-        return news if "news.google" in url else chart
+        return fixtures.NEWS_OK if "news.google" in url else chart
     return fetch
 
 
