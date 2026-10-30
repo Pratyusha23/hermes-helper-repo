@@ -1,7 +1,7 @@
 HERMES_SCRIPTS ?= $(HOME)/.hermes/scripts
 FIXTURE        := $(CURDIR)/examples/report.sample.json
 
-.PHONY: help test contract inputs demo check probe probe-lenient install uninstall
+.PHONY: help test contract inputs demo check probe probe-lenient rehearse rehearse-clean install uninstall
 
 help:
 	@echo "make test       run every offline test (no network)"
@@ -11,6 +11,8 @@ help:
 	@echo "make check      hit the live endpoints once and print the report"
 	@echo "make probe      canary: every provider must answer, keeps the bytes"
 	@echo "make probe-lenient  passes if each symbol has one live provider"
+	@echo "make rehearse   fake a breakage so you can watch canary-fix run"
+	@echo "make rehearse-clean  close the fake issue, remove the files"
 	@echo "make install    copy the scripts into $(HERMES_SCRIPTS)"
 	@echo "make uninstall  remove them again"
 
@@ -45,6 +47,14 @@ probe:
 
 probe-lenient:
 	python3 scripts/probe.py --out diagnosis --allow-fallback
+
+# Rehearse before you trust it. An unattended agent nobody has watched
+# do the job is a guess. Needs CANARY_REPO=owner/name.
+rehearse:
+	bash examples/fake-breakage.sh
+
+rehearse-clean:
+	bash examples/fake-breakage.sh --clean
 
 install:
 	mkdir -p $(HERMES_SCRIPTS)
