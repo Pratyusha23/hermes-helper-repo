@@ -111,10 +111,15 @@ in the context. Plain text only." \
 # morning where nothing is broken this prints {"wakeAgent": false} and costs
 # nothing.
 #
-# Requires CANARY_REPO and a token in ~/.hermes/secrets/gh_token with
-# Contents: read, Issues: write, Actions: read.
+# `make install` writes ~/.hermes/canary.conf from the clone's git remote, and
+# the gate reads it. Do NOT write `CANARY_REPO=owner/name hermes cron create`:
+# that sets the variable for the create command only, and the scheduled run at
+# 08:23 would exit with "CANARY_REPO is not set" -- the same trap as MODE=.
+#
+# The token in ~/.hermes/secrets/gh_token needs Issues: Read and write,
+# Actions: Read, and Pull requests: Read and write.
 
-CANARY_REPO=owner/name hermes cron create "23 8 * * *" \
+hermes cron create "23 8 * * *" \
   "The data-source canary is failing. The context has the issue, the probe
 results, a directory of raw response bodies, and a marker_file path.
 

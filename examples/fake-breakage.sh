@@ -18,7 +18,28 @@
 
 set -euo pipefail
 
-repo="${CANARY_REPO:?set CANARY_REPO=owner/name}"
+# CANARY_REPO must be available to an unattended cron run, which has no
+# interactive shell and no exported variables. A config file written by
+# `make install` is the reliable source; the environment can still override it
+# for a one-off.
+conf="${CANARY_CONF:-$HOME/.hermes/canary.conf}"
+# shellcheck disable=SC1090
+[ -z "${CANARY_REPO:-}" ] && [ -r "$conf" ] && . "$conf"
+
+if [ -z "${CANARY_REPO:-}" ]; then
+  cat >&2 <<EOF
+CANARY_REPO is not set and $conf does not define it.
+
+Fix it once, permanently:
+    cd <your clone> && make install
+
+That writes $conf from the clone's git remote, so the cron job
+finds it too. For a one-off instead:
+    CANARY_REPO=owner/name $0
+EOF
+  exit 2
+fi
+repo="$CANARY_REPO"
 work="${WORK_DIR:-$HOME/.hermes/work/canary}"
 GH="${GH_BIN:-$(command -v gh 2>/dev/null || echo "$HOME/.local/bin/gh")}"
 

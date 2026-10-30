@@ -1,4 +1,6 @@
 HERMES_SCRIPTS ?= $(HOME)/.hermes/scripts
+# Read by canary_gate.sh, which a cron run reaches with no exported vars.
+CANARY_CONF    ?= $(HOME)/.hermes/canary.conf
 FIXTURE        := $(CURDIR)/examples/report.sample.json
 
 .PHONY: help test contract inputs demo check probe probe-lenient rehearse rehearse-clean install uninstall
@@ -66,6 +68,20 @@ install:
 	install -m 755 scripts/briefing-gate.sh  $(HERMES_SCRIPTS)/
 	install -m 755 scripts/canary_gate.sh    $(HERMES_SCRIPTS)/
 	install -m 755 scripts/probe.py          $(HERMES_SCRIPTS)/
+	@if [ -s "$(CANARY_CONF)" ]; then \
+	  echo "kept $(CANARY_CONF): $$(cat $(CANARY_CONF))"; \
+	else \
+	  slug=$$(git remote get-url origin 2>/dev/null \
+	          | sed -E 's#\.git$$##; s#^.*[:/]([^/]+/[^/]+)$$#\1#'); \
+	  if [ -n "$$slug" ]; then \
+	    mkdir -p $$(dirname $(CANARY_CONF)); \
+	    printf 'CANARY_REPO=%s\n' "$$slug" > $(CANARY_CONF); \
+	    chmod 600 $(CANARY_CONF); \
+	    echo "wrote $(CANARY_CONF): CANARY_REPO=$$slug"; \
+	  else \
+	    echo "no git remote; write $(CANARY_CONF) by hand" >&2; \
+	  fi; \
+	fi
 	@echo "installed into $(HERMES_SCRIPTS)"
 
 uninstall:

@@ -11,14 +11,37 @@
 # That artifact is the reason the GitHub token exists.
 #
 # Environment:
-#   CANARY_REPO   owner/name of the repo running the workflow  (required)
+#   CANARY_REPO   owner/name; defaults to ~/.hermes/canary.conf, written
+#                 by `make install` from the clone's git remote
 #   GH_BIN        path to the gh binary      (default: found on PATH, then ~/.local/bin/gh)
 #   GH_TOKEN_FILE path to the token          (default: ~/.hermes/secrets/gh_token)
 #   WORK_DIR      scratch directory          (default: ~/.hermes/work/canary)
 
 set -euo pipefail
 
-repo="${CANARY_REPO:?set CANARY_REPO=owner/name}"
+# CANARY_REPO must be available to an unattended cron run, which has no
+# interactive shell and no exported variables. A config file written by
+# `make install` is the reliable source; the environment can still override it
+# for a one-off.
+conf="${CANARY_CONF:-$HOME/.hermes/canary.conf}"
+# shellcheck disable=SC1090
+[ -z "${CANARY_REPO:-}" ] && [ -r "$conf" ] && . "$conf"
+
+if [ -z "${CANARY_REPO:-}" ]; then
+  cat >&2 <<EOF
+CANARY_REPO is not set and $conf does not define it.
+
+Fix it once, permanently:
+    cd <your clone> && make install
+
+That writes $conf from the clone's git remote, so the cron job
+finds it too. For a one-off instead:
+    CANARY_REPO=owner/name $0
+EOF
+  echo '{"wakeAgent": false}'
+  exit 0
+fi
+repo="$CANARY_REPO"
 token_file="${GH_TOKEN_FILE:-$HOME/.hermes/secrets/gh_token}"
 work="${WORK_DIR:-$HOME/.hermes/work/canary}"
 
