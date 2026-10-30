@@ -42,10 +42,19 @@ jobs:
 
       # Both checks run even when the first one fails: we want both signals,
       # not an early exit that hides half the diagnosis.
+      # The output contract: report.json's shape, which format_plain.jq, the
+      # gate and the cron prompt all depend on. No upstream change can justify
+      # breaking this, so it is reported separately and more loudly.
+      - name: Output contract
+        id: contract
+        continue-on-error: true
+        run: python3 -m unittest discover -s tests -p 'test_contract.py' -v
+
       - name: Offline suite
         id: offline
+        if: always()
         continue-on-error: true
-        run: python3 -m unittest discover -s tests -v
+        run: python3 -m unittest discover -s tests -p 'test_quotes.py' -v
 
       - name: Live probe
         id: probe
@@ -65,20 +74,21 @@ jobs:
           if-no-files-found: warn
 
       - name: Report breakage
-        if: always() && (steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
+        if: always() && (steps.contract.outcome == 'failure' || steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
+          CONTRACT: ${{ steps.contract.outcome }}
           OFFLINE: ${{ steps.offline.outcome }}
           PROBE: ${{ steps.probe.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash .github/scripts/report-breakage.sh
 
       - name: Close the issue once everything passes again
-        if: steps.offline.outcome == 'success' && steps.probe.outcome == 'success'
+        if: steps.contract.outcome == 'success' && steps.offline.outcome == 'success' && steps.probe.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/close-breakage.sh
 
-      - name: Fail the run if either check failed
-        if: always() && (steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
+      - name: Fail the run if any check failed
+        if: always() && (steps.contract.outcome == 'failure' || steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
         run: exit 1

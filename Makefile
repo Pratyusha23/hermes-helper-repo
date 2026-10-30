@@ -1,10 +1,12 @@
 HERMES_SCRIPTS ?= $(HOME)/.hermes/scripts
 FIXTURE        := $(CURDIR)/examples/report.sample.json
 
-.PHONY: help test demo check probe probe-lenient install uninstall
+.PHONY: help test contract inputs demo check probe probe-lenient install uninstall
 
 help:
-	@echo "make test       run the offline test suite (no network)"
+	@echo "make test       run every offline test (no network)"
+	@echo "make contract   output contract only -- never relax these"
+	@echo "make inputs     parser tests against saved fixtures"
 	@echo "make demo       show all three output modes, using the fixture"
 	@echo "make check      hit the live endpoints once and print the report"
 	@echo "make probe      canary: every provider must answer, keeps the bytes"
@@ -14,6 +16,13 @@ help:
 
 test:
 	python3 -m unittest discover -s tests -v
+
+# report.json's shape. Yahoo is allowed to change; this is not.
+contract:
+	python3 -m unittest discover -s tests -p 'test_contract.py' -v
+
+inputs:
+	python3 -m unittest discover -s tests -p 'test_quotes.py' -v
 
 # Exercises the formatter and the gate without touching the network.
 demo:

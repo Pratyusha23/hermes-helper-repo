@@ -122,10 +122,21 @@ Read the probe to find which provider and which parse step failed. Then read
 the matching .raw file in diagnosis_dir before changing anything -- the body
 shows you the actual new format. Never guess at a format you have not read.
 
-Make the smallest change to scripts/quotes.py that parses the new shape, add a
-test to tests/test_quotes.py using the real body as a fixture, and run the
-suite. Push to a branch and comment on the issue with what changed and why.
-Never push to main. Never edit the workflow.
+Make the smallest change to scripts/quotes.py that parses the new shape.
+
+Then update tests/test_quotes.py: REPLACE the stale fixture for that provider
+with the real new body. Do not keep the old one -- it describes a format that
+no longer exists anywhere, and keeping it forces the parser to carry a dead
+branch forever.
+
+tests/test_contract.py is different and you must NOT edit it. It asserts the
+shape of report.json, which format_plain.jq, the gate and this prompt all
+depend on. Yahoo is allowed to change; report.json is not. If your fix cannot
+satisfy that file, the fix is wrong: stop, push nothing, and report why.
+
+Run the whole suite and report the full count. Push to a branch and comment on
+the issue with what changed and why. Never push to main. Never edit the
+workflow.
 
 If the raw body shows the endpoint is simply gone rather than changed, say so
 and recommend a replacement instead of writing code." \

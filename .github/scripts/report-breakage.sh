@@ -10,12 +10,20 @@ set -euo pipefail
 LABEL="canary"
 TITLE="Data source check failing"
 
+contract="${CONTRACT:-unknown}"
 offline="${OFFLINE:-unknown}"
 probe="${PROBE:-unknown}"
 run_url="${RUN_URL:-}"
 
-# The two-signal matrix is the whole reason both checks run.
-if [ "$offline" = "failure" ] && [ "$probe" = "failure" ]; then
+# The output contract overrides everything else. report.json's shape is what
+# format_plain.jq, the gate and the cron prompt all read; no upstream change
+# justifies breaking it.
+if [ "$contract" = "failure" ]; then
+  verdict="**The output contract is broken.** \`report.json\` no longer has the
+shape that \`format_plain.jq\`, the \`MODE=gate\` filter and the cron prompt read.
+Fix this before anything else, and do not relax \`tests/test_contract.py\` to make
+it pass — absorbing upstream change is the entire reason that file exists."
+elif [ "$offline" = "failure" ] && [ "$probe" = "failure" ]; then
   verdict="**Both checks failed.** Almost certainly our own code — a bad commit
 breaks the offline suite and the live probe together. Start with the most
 recent change to \`scripts/\`, not with Yahoo."
@@ -55,6 +63,7 @@ $verdict
 
 | check | result |
 |---|---|
+| output contract | \`$contract\` |
 | offline suite | \`$offline\` |
 | live probe | \`$probe\` |
 

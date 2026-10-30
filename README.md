@@ -89,7 +89,8 @@ scripts/canary_gate.sh     pre-run script for the canary-fix cron job
 .github/workflows/canary.yml  daily two-signal check
 examples/cron-commands.sh  the cron jobs, with the prompts
 examples/report.sample.json  fixture, so the formatter and gate run offline
-tests/test_quotes.py       27 offline tests
+tests/test_quotes.py       input tests: parsers vs saved fixtures (disposable)
+tests/test_contract.py     output contract: report.json's shape (permanent)
 ```
 
 ## Configuration
@@ -187,6 +188,34 @@ make probe                      # strict: every provider must answer
 make probe-lenient              # passes if each symbol has one live provider
 ```
 
+### Two kinds of test, and only one of them is permanent
+
+| | what it pins | when upstream changes |
+|---|---|---|
+| `tests/test_quotes.py` | parsers against saved Yahoo/Stooq bodies | **replace** the stale fixture — an old one describes a format that no longer exists and forces a dead branch in the parser |
+| `tests/test_contract.py` | the shape of `report.json` | **never relaxed** — absorbing upstream change is the entire reason it exists |
+
+`format_plain.jq`, the `MODE=gate` filter and the cron prompt all read
+`report.json` by key. That shape is the contract. The input format is allowed
+to change; the output format is not.
+
+`test_contract.py` also runs the real consumers rather than just asserting a
+schema, because a schema drifts from what consumers actually need. It pipes a
+report through `format_plain.jq` and through the gate's `jq` expression and
+checks the briefing contains every instrument, the gate opens above the
+threshold and stays shut below it, and the verdict is a single line — Hermes
+reads only the last line, so a pretty-printed verdict silently never wakes the
+agent.
+
+It catches things the input tests cannot. Change `asof` from ISO-8601 to a unix
+timestamp and all input tests still pass; the contract fails. Add an instrument
+that never reaches the briefing and only the contract notices.
+
+```bash
+make contract     # the permanent output contract alone
+make test         # everything
+```
+
 ### Letting the agent take the first pass
 
 `scripts/canary_gate.sh` gates a second Hermes cron job on that issue. On every
@@ -197,8 +226,15 @@ two lines that matter are *read the raw body before changing anything* and *add
 a test using the real body as a fixture*, so every upstream break becomes a
 permanent regression test.
 
-Set `CANARY_REPO=owner/name` and put a fine-grained token with **Contents:
-read**, **Issues: write** and **Actions: read** in `~/.hermes/secrets/gh_token`.
+Two credentials, because they do different jobs and neither can do the other's:
+
+| capability | credential | why |
+|---|---|---|
+| clone, push the fix branch | **deploy key** (write), in `~/.ssh/` | git over SSH; no API surface at all |
+| read the issue, download the artifact, comment | **fine-grained token**, in `~/.hermes/secrets/gh_token` | REST API; deploy keys cannot authenticate to it |
+
+Splitting them means the token never needs `Contents: write` — it only needs
+**Issues: write** and **Actions: read**. Set `CANARY_REPO=owner/name` too.
 
 ### What none of this catches
 
