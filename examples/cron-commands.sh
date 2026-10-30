@@ -170,6 +170,18 @@ Report the full count. Then:
                        go to step 5 and report the failing test names verbatim.
 Never merge. Never force-push. Never edit the workflow or this skill.
 
+If the PUSH itself is rejected -- permissions, authentication, a protected
+branch -- do not retry it and do not try another remote, another URL or
+another credential. Leave the commit on the local branch, and in step 5
+report the exact error and the branch name. Then DO mark handled: the work is
+done and waiting, and a human has to fix the credential before anything can
+change.
+
+On a later run, before doing anything in step 3: if a canary-fix/* branch
+already exists locally and its tests pass, the work is already done. Do not
+redo it. Try the push and the pull request again, report the outcome, and
+stop.
+
 STEP 5 -- REPORT, THEN MARK HANDLED.
 Comment on the issue, and send a short plain-text report: what broke, what the
 raw body showed, what you changed, the test count, and the PR link or the
