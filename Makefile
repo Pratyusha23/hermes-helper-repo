@@ -3,7 +3,7 @@ HERMES_SCRIPTS ?= $(HOME)/.hermes/scripts
 CANARY_CONF    ?= $(HOME)/.hermes/canary.conf
 FIXTURE        := $(CURDIR)/examples/report.sample.json
 
-.PHONY: help test contract inputs demo check probe probe-lenient rehearse rehearse-clean install uninstall
+.PHONY: help test contract inputs demo check probe probe-lenient rehearse rehearse-clean doctor install uninstall
 
 help:
 	@echo "make test       run every offline test (no network)"
@@ -13,6 +13,7 @@ help:
 	@echo "make check      hit the live endpoints once and print the report"
 	@echo "make probe      canary: every provider must answer, keeps the bytes"
 	@echo "make probe-lenient  passes if each symbol has one live provider"
+	@echo "make doctor     check everything an unattended run depends on"
 	@echo "make rehearse   fake a breakage so you can watch canary-fix run"
 	@echo "make rehearse-clean  close the fake issue, remove the files"
 	@echo "make install    copy the scripts into $(HERMES_SCRIPTS)"
@@ -52,6 +53,11 @@ probe-lenient:
 
 # Rehearse before you trust it. An unattended agent nobody has watched
 # do the job is a guess. Needs CANARY_REPO=owner/name.
+# Every check here is something that works when you type it and fails at
+# 03:00 with nobody watching.
+doctor:
+	@bash scripts/doctor.sh
+
 rehearse:
 	bash examples/fake-breakage.sh
 
@@ -68,6 +74,7 @@ install:
 	install -m 755 scripts/briefing-gate.sh  $(HERMES_SCRIPTS)/
 	install -m 755 scripts/canary_gate.sh    $(HERMES_SCRIPTS)/
 	install -m 755 scripts/probe.py          $(HERMES_SCRIPTS)/
+	install -m 755 scripts/doctor.sh         $(HERMES_SCRIPTS)/
 	@if [ -s "$(CANARY_CONF)" ]; then \
 	  grep -q CANARY_CLONE $(CANARY_CONF) \
 	    || printf 'CANARY_CLONE=%s\n' "$(CURDIR)" >> $(CANARY_CONF); \
