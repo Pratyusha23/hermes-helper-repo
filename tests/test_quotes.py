@@ -224,11 +224,14 @@ class TestBuildReport(unittest.TestCase):
 
     def test_biggest_move_is_absolute(self):
         """A 2% fall must open the gate exactly like a 2% rise."""
-        falling = json.dumps({"chart": {"result": [{"meta": {
-            "regularMarketPrice": 90.0, "chartPreviousClose": 100.0,
-        }}]}}).encode()
-        report = quotes.build_report(
-            fetch=router(yahoo=falling, news=NEWS_OK))
+        def fetch(url, timeout=20):
+            if "news.google" in url:
+                return NEWS_OK
+            # From fixtures.py like everything else: a test that embeds its
+            # own upstream body silently stops tracking the real shape.
+            return fixtures.chart_body(90.0, 100.0)
+
+        report = quotes.build_report(fetch=fetch)
         self.assertEqual(report["biggest_move"], 10.0)
 
 

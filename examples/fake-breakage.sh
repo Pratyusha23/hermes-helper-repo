@@ -9,7 +9,8 @@
 # have actually read the body.
 #
 #   bash examples/fake-breakage.sh              # issue + diagnosis only
-#   bash examples/fake-breakage.sh --with-break  # ALSO break the parser
+#   bash examples/fake-breakage.sh --with-break  # ALSO break the suite
+#   bash examples/fake-breakage.sh --break-live  # full end-to-end, no fake issue
 #   hermes cron run canary-fix                   # watch the job work
 #   bash examples/fake-breakage.sh --clean       # undo all of it
 #
@@ -18,9 +19,23 @@
 # CORRECT answer, and it exercises the gate, the context and the marker -- but
 # not the fix path.
 #
-# --with-break edits scripts/quotes.py so parse_yahoo really does fail on the
-# seeded body. The suite goes red and the agent has genuine work. The change is
-# tracked by git, and --clean reverts it with git checkout.
+# --with-break moves the Yahoo fixture to the V2 shape, leaving the parser on
+# the old key. The suite goes red and the agent has genuine work.
+#
+# --break-live is the full chain, with no faked issue at all. It moves the
+# parser AND the fixture to V2, so the offline suite stays GREEN and only the
+# live probe fails -- which is precisely the "upstream changed shape" signal.
+# Commit and push it, and the workflow opens the issue by itself:
+#
+#   bash examples/fake-breakage.sh --break-live
+#   git commit -am "rehearsal: pretend Yahoo moved to V2" && git push
+#   # watch Actions -> probe fails -> issue opens
+#   hermes cron run canary-fix
+#   # review the PR, merge it, next canary run closes the issue
+#
+# That costs a real commit on your default branch, undone by merging the
+# agent's PR (or `git revert`). It is the only way to exercise the workflow,
+# the issue, the artifact download and the fix in one pass.
 #
 # Rehearse before you trust it. An unattended agent that has never been
 # watched doing the job is a guess, and the first real break at 3am is a bad
@@ -100,6 +115,38 @@ EOF
   fi
 
   echo "cleaned"
+  exit 0
+fi
+
+if [ "${1:-}" = "--break-live" ]; then
+  # Move BOTH the parser and the fixture to the V2 shape. The offline suite
+  # agrees with itself and stays green; the live endpoint still sends
+  # regularMarketPrice, so only the probe fails. Offline pass + probe fail is
+  # the signal that means "upstream changed", which is the whole point.
+  python3 - <<'PATCH'
+import pathlib, sys
+
+q = pathlib.Path("scripts/quotes.py")
+s = q.read_text()
+old = '    previous = meta.get("chartPreviousClose") or meta.get("previousClose")'
+if old not in s:
+    sys.exit("could not find the line to break in scripts/quotes.py")
+s = s.replace('_move(float(meta["regularMarketPrice"]),',
+              '_move(float(meta["regularMarketPriceV2"]["raw"]),')
+q.write_text(s)
+
+f = pathlib.Path("tests/fixtures.py")
+t = f.read_text()
+t = t.replace('    meta = {"regularMarketPrice": price}',
+              '    meta = {"regularMarketPriceV2": {"raw": price, "fmt": str(price)}}')
+f.write_text(t)
+PATCH
+  echo "parser and fixture both moved to the V2 shape."
+  echo "  offline suite: should stay GREEN   -> make test"
+  echo "  live probe:    should now FAIL     -> make probe"
+  echo
+  echo "Next:  git commit -am 'rehearsal: pretend Yahoo moved to V2' && git push"
+  echo "       then watch Actions open the issue by itself."
   exit 0
 fi
 
