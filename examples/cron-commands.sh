@@ -104,3 +104,31 @@ in the context. Plain text only." \
 # `hermes cron run` is the one you will use most. A job that works by hand and
 # fails on schedule is almost always an environment difference: the scheduler
 # does not source your interactive shell profile. Use absolute paths.
+
+
+# ------------------------------------------------ Canary: fix the scraper
+# Gates on an open `canary` issue from .github/workflows/canary.yml. On every
+# morning where nothing is broken this prints {"wakeAgent": false} and costs
+# nothing.
+#
+# Requires CANARY_REPO and a token in ~/.hermes/secrets/gh_token with
+# Contents: read, Issues: write, Actions: read.
+
+CANARY_REPO=owner/name hermes cron create "23 8 * * *" \
+  "The data-source canary is failing. The context has the issue, the probe
+results, and a directory of raw response bodies.
+
+Read the probe to find which provider and which parse step failed. Then read
+the matching .raw file in diagnosis_dir before changing anything -- the body
+shows you the actual new format. Never guess at a format you have not read.
+
+Make the smallest change to scripts/quotes.py that parses the new shape, add a
+test to tests/test_quotes.py using the real body as a fixture, and run the
+suite. Push to a branch and comment on the issue with what changed and why.
+Never push to main. Never edit the workflow.
+
+If the raw body shows the endpoint is simply gone rather than changed, say so
+and recommend a replacement instead of writing code." \
+  --name canary-fix \
+  --script canary_gate.sh \
+  --deliver telegram

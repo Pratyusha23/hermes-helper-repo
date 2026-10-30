@@ -12,3 +12,6 @@ __pycache__/
 venv/
 
 .DS_Store
+
+# Canary output; regenerated on every probe run.
+diagnosis/

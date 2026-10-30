@@ -84,7 +84,10 @@ scripts/format_plain.jq    report JSON -> plain-text briefing
 scripts/briefing-plain.sh  wrapper: MODE=plain
 scripts/briefing-raw.sh    wrapper: MODE=raw
 scripts/briefing-gate.sh   wrapper: MODE=gate
-examples/cron-commands.sh  the three cron jobs, with the prompts
+scripts/probe.py           live canary: hits every provider, keeps the bytes
+scripts/canary_gate.sh     pre-run script for the canary-fix cron job
+.github/workflows/canary.yml  daily two-signal check
+examples/cron-commands.sh  the cron jobs, with the prompts
 examples/report.sample.json  fixture, so the formatter and gate run offline
 tests/test_quotes.py       27 offline tests
 ```
@@ -149,14 +152,59 @@ omitted for a symbol it does not carry.
 | Natural gas | `NG=F` | `ng.f` |
 | USD/INR | `INR=X` | `usdinr` |
 
-### What the fallback does not cover
+## The canary
 
-Both providers changing at once, and either one silently returning stale
-numbers. The tests inject every upstream response, so they keep passing when
-the endpoints are down and start failing the moment our own parsing or
-fallback logic breaks — but no test catches a format change upstream.
+Both providers will change shape eventually. The problem is not that they
+break, it is that they break *silently* — and a dead fallback is invisible
+until the day the primary fails too.
 
-**Run `make check` once a month.** It is the only thing that does.
+`.github/workflows/canary.yml` runs two checks every morning and the
+combination localises the fault:
+
+| offline suite | live probe | what it means |
+|---|---|---|
+| pass | pass | nothing to do |
+| pass | **fail** | upstream changed shape — fix the parser |
+| **fail** | pass | you broke it — look at the last commit |
+| **fail** | **fail** | almost certainly you; a bad commit breaks both |
+
+Two design choices make it worth having:
+
+**The probe is strict.** It fails if *any* provider fails, even one whose
+symbol the other provider is still serving. A working Yahoo does not excuse a
+broken Stooq.
+
+**It keeps the bytes.** `scripts/probe.py` writes the first 4 KB of every
+response into `diagnosis/` *before* parsing it. `KeyError:
+'regularMarketPrice'` tells you the parse failed, not what the response now
+looks like — without the body you are guessing at a new format.
+
+Failures open one reused issue labelled `canary`, and it closes itself when
+both checks pass again. Run the probe by hand with:
+
+```bash
+make probe                      # strict: every provider must answer
+make probe-lenient              # passes if each symbol has one live provider
+```
+
+### Letting the agent take the first pass
+
+`scripts/canary_gate.sh` gates a second Hermes cron job on that issue. On every
+morning where nothing is broken it prints `{"wakeAgent": false}` and no model is
+called; when something breaks it hands the agent the issue, `probe.json` and the
+directory of raw bodies. See `examples/cron-commands.sh` for the prompt — the
+two lines that matter are *read the raw body before changing anything* and *add
+a test using the real body as a fixture*, so every upstream break becomes a
+permanent regression test.
+
+Set `CANARY_REPO=owner/name` and put a fine-grained token with **Contents:
+read**, **Issues: write** and **Actions: read** in `~/.hermes/secrets/gh_token`.
+
+### What none of this catches
+
+Both providers changing at once, and either one returning *wrong but
+well-formed* numbers — a stale close, a wrong currency. Shape checks cannot see
+that. Nothing replaces glancing at the briefing and noticing gold looks off.
 
 ## Notes from running this
 

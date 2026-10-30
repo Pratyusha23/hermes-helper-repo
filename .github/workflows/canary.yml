@@ -1,0 +1,84 @@
+name: canary
+
+# Two signals, every morning:
+#
+#   offline suite  is our own parsing logic still self-consistent?
+#   live probe     do the real endpoints still look the way we parse them?
+#
+# The combination is the diagnosis, which is the point of running both:
+#
+#   pass / pass   nothing to do
+#   pass / FAIL   upstream changed shape -- fix the parser
+#   FAIL / pass   we broke it -- look at the last commit, not at Yahoo
+#   FAIL / FAIL   almost certainly us; a bad commit breaks both
+#
+# Either way the raw response bodies are kept as an artifact, because a parse
+# break is only actionable if you can see the bytes that broke it.
+
+on:
+  schedule:
+    # 02:41 UTC, a little after 08:00 IST. Off the hour on purpose: scheduled
+    # workflows queue on the hour and GitHub drops them under load.
+    - cron: "41 2 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/**"
+      - ".github/workflows/canary.yml"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Both checks run even when the first one fails: we want both signals,
+      # not an early exit that hides half the diagnosis.
+      - name: Offline suite
+        id: offline
+        continue-on-error: true
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Live probe
+        id: probe
+        if: always()
+        continue-on-error: true
+        # Strict: a working Yahoo does not excuse a broken Stooq. The value of
+        # a fallback is that it works on the day the primary does not.
+        run: python3 scripts/probe.py --out diagnosis
+
+      - name: Upload diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnosis-${{ github.run_id }}
+          path: diagnosis/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Report breakage
+        if: always() && (steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OFFLINE: ${{ steps.offline.outcome }}
+          PROBE: ${{ steps.probe.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash .github/scripts/report-breakage.sh
+
+      - name: Close the issue once everything passes again
+        if: steps.offline.outcome == 'success' && steps.probe.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/close-breakage.sh
+
+      - name: Fail the run if either check failed
+        if: always() && (steps.offline.outcome == 'failure' || steps.probe.outcome == 'failure')
+        run: exit 1

@@ -259,3 +259,72 @@ class TestBuildReport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ------------------------------------------------------------------- probe
+
+import probe  # noqa: E402
+
+
+class TestProbe(unittest.TestCase):
+    """The canary's whole job is to leave evidence behind. Prove it does."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = pathlib.Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_records_a_good_response(self):
+        rec = probe.probe_one(GOLD, "yahoo", self.out,
+                              fetch=router(yahoo=YAHOO_OK))
+        self.assertTrue(rec["ok"])
+        self.assertEqual(rec["stage"], "ok")
+        self.assertEqual(rec["parsed"]["pct"], 0.84)
+
+    def test_keeps_the_bytes_when_parsing_fails(self):
+        """A parse break is only actionable if the raw body was saved."""
+        rec = probe.probe_one(GOLD, "yahoo", self.out,
+                              fetch=router(yahoo=YAHOO_BROKEN))
+        self.assertFalse(rec["ok"])
+        self.assertEqual(rec["stage"], "parse")
+        saved = self.out / rec["raw_file"]
+        self.assertTrue(saved.exists())
+        self.assertEqual(saved.read_bytes(), YAHOO_BROKEN)
+
+    def test_no_raw_file_when_the_fetch_itself_failed(self):
+        rec = probe.probe_one(GOLD, "yahoo", self.out,
+                              fetch=router(yahoo=OSError("down")))
+        self.assertEqual(rec["stage"], "fetch")
+        self.assertIsNone(rec["raw_file"])
+
+    def test_raw_body_is_capped(self):
+        huge = b"x" * (probe.RAW_CAP * 3)
+        rec = probe.probe_one(GOLD, "yahoo", self.out, fetch=router(yahoo=huge))
+        self.assertEqual((self.out / rec["raw_file"]).stat().st_size,
+                         probe.RAW_CAP)
+
+    def test_filename_is_safe_for_yahoo_symbols(self):
+        """GC=F must not produce a filename with an '=' in it."""
+        rec = probe.probe_one(GOLD, "yahoo", self.out,
+                              fetch=router(yahoo=YAHOO_OK))
+        self.assertNotIn("=", rec["raw_file"])
+
+    def test_unconfigured_provider_is_skipped_not_failed(self):
+        rec = probe.probe_one({"label": "Spot", "yahoo": "GC=F"}, "stooq",
+                              self.out, fetch=router())
+        self.assertEqual(rec["stage"], "skipped")
+        self.assertIsNone(rec["symbol"])
+
+    def test_empty_feed_counts_as_a_parse_failure(self):
+        empty = b'<?xml version="1.0"?><rss><channel></channel></rss>'
+        rec = probe.probe_news(self.out, fetch=router(news=empty))
+        self.assertFalse(rec["ok"])
+        self.assertIn("no headlines", rec["error"])
+
+    def test_summary_table_names_the_broken_provider(self):
+        recs = [probe.probe_one(GOLD, "yahoo", self.out,
+                                fetch=router(yahoo=YAHOO_BROKEN))]
+        text = probe.summarise(recs)
+        self.assertIn("FAILED", text)
+        self.assertIn("yahoo", text)
