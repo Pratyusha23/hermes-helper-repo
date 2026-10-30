@@ -23,13 +23,38 @@ work="${WORK_DIR:-$HOME/.hermes/work/canary}"
 GH="${GH_BIN:-$(command -v gh 2>/dev/null || echo "$HOME/.local/bin/gh")}"
 
 if [ "${1:-}" = "--clean" ]; then
+  failed=0
   for n in $("$GH" issue list --repo "$repo" --label canary --state open \
                --limit 10 --json number --jq '.[].number'); do
-    "$GH" issue close "$n" --repo "$repo" --comment "Rehearsal over." \
-      && echo "closed #$n"
+    # Close WITHOUT a comment: commenting needs Issues:write, and a token that
+    # lacks it would fail the whole call and leave the issue open. Closing is
+    # the part that matters -- an open canary issue wakes the agent daily.
+    if "$GH" issue close "$n" --repo "$repo" 2>/dev/null; then
+      echo "closed #$n"
+    else
+      echo "FAILED to close #$n" >&2
+      failed=1
+    fi
   done
+
   rm -rf "$work/diagnosis" 2>/dev/null \
-    || echo "could not remove $work/diagnosis -- delete it by hand"
+    || { echo "FAILED to remove $work/diagnosis" >&2; failed=1; }
+
+  still_open=$("$GH" issue list --repo "$repo" --label canary --state open \
+                 --limit 10 --json number --jq 'length' 2>/dev/null || echo "?")
+
+  if [ "$failed" -ne 0 ] || [ "$still_open" != "0" ]; then
+    cat >&2 <<EOF
+
+NOT clean. $still_open canary issue(s) still open.
+
+An open canary issue wakes the agent on every scheduled run, so this is not
+cosmetic. Close it in the web UI, or give the token Issues: Read and write
+(Settings -> Developer settings -> Fine-grained tokens) and run this again.
+EOF
+    exit 1
+  fi
+
   echo "cleaned"
   exit 0
 fi
